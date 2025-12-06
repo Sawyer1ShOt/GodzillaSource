@@ -45,7 +45,7 @@ import util.functions;
 import util.http.Http;
 
 public class ApplicationContext {
-   public static final String VERSION = "4.01";
+   public static final String VERSION = "NOVERSION";
    private static final HashMap<String, Class<?>> payloadMap;
    private static final HashMap<String, HashMap<String, Class<?>>> cryptionMap;
    private static final HashMap<String, HashMap<String, Class<?>>> pluginMap;
@@ -596,7 +596,7 @@ public class ApplicationContext {
       windowsHeight = Toolkit.getDefaultToolkit().getScreenSize().height;
       isShowHttpProgressBar = new ThreadLocal();
       PLUGIN_CLASSLOADER = new CoreClassLoader(ApplicationContext.class.getClassLoader());
-      easterEgg = true;
+      easterEgg = false;
       payloadMap = new HashMap();
       cryptionMap = new HashMap();
       pluginMap = new HashMap();
