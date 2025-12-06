@@ -1,5 +1,9 @@
 package shells.payloads.java;
 
+import javassist.CtField;
+import javassist.CtMethod;
+import javassist.CtNewMethod;
+import java.util.UUID;
 import core.EasyI18N;
 import core.Encoding;
 import core.annotation.PayloadAnnotation;
